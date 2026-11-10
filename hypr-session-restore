@@ -37,6 +37,21 @@ EXCLUDE_CLASSES = {
 EXCLUDE_CLASSES |= {
     c.strip() for c in os.environ.get("HYPR_SESSION_EXCLUDE", "").split(",") if c.strip()
 }
+EXCLUDE_PREFIXES = (
+    "steam_app_",  # Steam/Proton games — don't auto-launch games on login
+)
+
+# Window classes whose /proc/<pid>/cmdline belongs to an internal helper
+# (e.g. Steam windows are owned by ./steamwebhelper) rather than a valid
+# relaunch command. Maps window class -> relaunch command.
+CLASS_COMMANDS = {
+    "steam": "steam",
+}
+
+
+def is_excluded(cls):
+    """Return True if a window class should never be saved or restored."""
+    return not cls or cls in EXCLUDE_CLASSES or cls.startswith(EXCLUDE_PREFIXES)
 
 # Terminal handling: if a known TUI runs inside, relaunch it in its cwd;
 # otherwise reopen the terminal in the shell's cwd.
@@ -123,6 +138,9 @@ def relaunch_command(client):
     pid = client["pid"]
     cls = client.get("class", "")
 
+    if cls in CLASS_COMMANDS:
+        return CLASS_COMMANDS[cls]
+
     if cls in TERMINALS:
         binary, cwd_flag, exec_flag = TERMINALS[cls]
         tui = find_descendant(pid, TUI_PROGRAMS)
@@ -158,7 +176,7 @@ def save():
         if not c.get("mapped") or c.get("pid", -1) <= 0:
             continue
         # windows with no class are invisible helpers (e.g. tray bridges)
-        if not c.get("class") or c["class"] in EXCLUDE_CLASSES:
+        if is_excluded(c.get("class", "")):
             continue
         cmd = relaunch_command(c)
         if not cmd:
@@ -246,7 +264,7 @@ def current_clients():
     return {
         c["address"]: c
         for c in hyprctl_json("clients")
-        if c.get("mapped") and c.get("class") and c["class"] not in EXCLUDE_CLASSES
+        if c.get("mapped") and not is_excluded(c.get("class", ""))
     }
 
 
@@ -258,7 +276,7 @@ def restore():
             session = json.load(f)
     except (OSError, ValueError):
         return
-    windows = session.get("windows", [])
+    windows = [w for w in session.get("windows", []) if not is_excluded(w.get("class", ""))]
     if not windows:
         return
 
@@ -283,7 +301,8 @@ def restore():
         win = windows[i]
         if not win["spawn"]:
             continue
-        dispatch(f"hl.dsp.exec_cmd({lua_long_str(win['cmd'])}, {exec_rules(win)})")
+        cmd = CLASS_COMMANDS.get(win.get("class", ""), win["cmd"])
+        dispatch(f"hl.dsp.exec_cmd({lua_long_str(cmd)}, {exec_rules(win)})")
         time.sleep(SPAWN_STAGGER)
 
     # Sweep: exec_cmd rules track the spawned PID, so windows from forking /
