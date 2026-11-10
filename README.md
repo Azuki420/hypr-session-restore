@@ -137,6 +137,8 @@ Everything lives at the top of the script:
 | Knob | Meaning |
 |---|---|
 | `EXCLUDE_CLASSES` | window classes never saved/restored — add anything your autostart already launches (bars, tray bridges, scratchpad daemons) |
+| `EXCLUDE_PREFIXES` | window class prefixes never saved/restored (defaults to `("steam_app_",)` so Steam/Proton games aren't auto-launched on login) |
+| `CLASS_COMMANDS` | window class → relaunch command overrides for apps whose `/proc/<pid>/cmdline` is an internal helper (defaults to `{"steam": "steam"}`) |
 | `TERMINALS` | terminal class → (binary, cwd flag, exec flag) |
 | `TUI_PROGRAMS` | programs relaunched inside their terminal |
 | `SAVE_INTERVAL` | daemon save period (default 60 s) |
